@@ -59,8 +59,8 @@ Após acessar o ssh novamente com o usuário vagrant, trocar para root e incluir
 ```bash
 $ su -
 Password: 
-# usermod -aG wheel vagrant 
-# exit
+usermod -aG wheel vagrant 
+exit
 ```
 Pronto agora conhecemos a senha do usuário root e usuário vagrant pode utilizar o sudo. `Senha do usuário vagrant é "vagrant"`
 
@@ -146,18 +146,31 @@ Utilizando a chave do arquivos `id_rsa-desafio-devel.gz.b64` deste repositório,
 
 **`Resposta:`**
 
-`Arquivo não encontrado no repositório`
-
-Encontrei um par de chaves no diretório .ssh do usuário devel.
-
-Copiei as chaves para o diretório do usuário getup
 
 
 ```bash
-sudo chown getup:getup id_rsa*
-mkdir .ssh
-chmod 700 .ssh/
-cp id_rsa* .ssh
+#decodificando 
+base64 --decode id_rsa-desafio-linux-devel.gz.b64 > id_rsa-desafio-linux-devel.gz
+#descompactando
+gzip -d id_rsa-desafio-linux-devel.gz
+chmod 400 id_rsa-desafio-linux-devel
+ssh -i id_rsa-desafio-linux-devel devel@192.168.0.28 -v
+#verificado problema no arquivo
+Load key "id_rsa-desafio-linux-devel": error in libcrypto
+cat -e id_rsa-desafio-linux-devel
+#convertendo arquivo para o formato adequado
+dos2unix id_rsa-desafio-linux-devel
+ssh -i id_rsa-desafio-linux-devel devel@192.168.0.28 -vvv
+[vagrant@centos8 ~]$ sudo journalctl -u sshd
+#encontrado erro
+Authentication refused: bad ownership or modes for file /home/devel/.ssh/authorized_keys
+#Permissões do arquivo estava com 777:
+-rwxrwxrwx. 1 devel devel  617 Sep  3 22:54 authorized_keys
+chmod 600 authorized_keys
+-rw-------. 1 devel devel  617 Sep  3 22:54 authorized_keys
+#nova tentativa
+ssh -i id_rsa-desafio-linux-devel devel@192.168.0.28
+[devel@centos8 ~]$ 
 ```
 
 
@@ -451,17 +464,18 @@ Aumente a partição LVM `sdb1` para `5Gi` e expanda o filesystem para o tamanho
 
 **`Resposta:`**
 ```bash
-sudo cfdisk /dev/sdc
-sudo partprobe /dev/sdb
-sudo pvdisplay
-sudo pvcreate /dev/sdb2
-sudo vgdisplay
-sudo vgextend data_vg /dev/sdb2
-sudo lvextend -l+100%FREE /dev/data_vg/data_lv
-sudo lvdisplay
+sudo fdisk -l
+sudo parted /dev/sdb print free
+sudo parted /dev/sdb resizepart 1 5368MB
+#  1      1049kB  5368MB  5367MB  primary               lvm
+sudo pvresize /dev/sdb1
+#  /dev/sdb1  data_vg    lvm2 a--    <5.00g 4.00g
+#  data_vg      1   1   0 wz--n-   <5.00g 4.00g
+sudo lvextend -l +100%FREE /dev/data_vg/data_lv
+#  data_lv data_vg    -wi-ao----   <5.00g                           
 sudo resize2fs /dev/data_vg/data_lv
-/dev/mapper/data_vg-data_lv ext4      4.9G  4.0M  4.7G   1% /data
-
+# linha do resultado comando df -hT
+/dev/mapper/data_vg-data_lv ext4      5.0G  4.0M  4.7G   1% /data
 ```
 ### 8.2 Criar partição LVM
 
@@ -469,14 +483,15 @@ Crie uma partição LVM `sdb2` com `5Gi` e formate com o filesystem `ext4`.
 
 **`Resposta:`**
 ```bash
-sudo cfdisk /dev/sdc
+sudo cfdisk /dev/sdb
 sudo partprobe /dev/sdb
 sudo pvdisplay
-sudo pvcreate /dev/sdb3
-sudo vgcreate data2_vg /dev/sdb3
+sudo pvcreate /dev/sdb2
+sudo vgcreate data2_vg /dev/sdb2
 sudo lvcreate -n data2_lv -l+100%FREE data2_vg
 sudo mkfs.ext4 /dev/data2_vg/data2_lv
 sudo mount /dev/data2_vg/data2_lv /data2
+# linha do resultado comando df -hT
 /dev/mapper/data2_vg-data2_lv ext4      4.9G   20M  4.6G   1% /data2
 ```
 
@@ -495,10 +510,8 @@ Disk /dev/sdc: 10.7GB
 Sector size (logical/physical): 512B/512B
 Partition Table: loop
 Disk Flags: 
-
 Number  Start  End     Size    File system  Flags
  1      0.00B  10.7GB  10.7GB  xfs
-
-/dev/sdc                    xfs        10G  104M  9.9G   2% /mnt
-
+# linha do resultado comando df -hT
+/dev/sdc                      xfs        10G  423M  9.6G   5% /xfs
 ```
